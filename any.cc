@@ -29,7 +29,6 @@ private:
 public:
     Any() : _content(NULL) {};
     template <class T>
-
     Any(const T &val) : _content(new placeholder<T>(val))
     {
     }

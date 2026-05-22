@@ -16,18 +16,24 @@ private:
     uint32_t _timeout;
     TaskFunc _task_cb;
     ReleaseFunc _release;
+    bool _cancel;
 
 public:
     TimerTask(uint64_t id, uint32_t delay, const TaskFunc &cb) : _id(id),
                                                                  _timeout(delay),
-                                                                 _task_cb(cb) {}
+                                                                 _task_cb(cb),
+                                                                 _cancel(false) {}
 
     ~TimerTask()
     {
-        _task_cb();
+
+        if (!_cancel)
+        {
+            _task_cb();
+        }
         _release();
     }
-
+    void Cancel() { _cancel = true; }
     void SetRelease(const ReleaseFunc &cb) { _release = cb; }
 
     uint32_t DelayTime() { return _timeout; }
@@ -84,6 +90,16 @@ public:
         int delay = pt->DelayTime();
         int pos = (_tick + delay) % _capacity;
         _wheel[pos].push_back(pt);
+    }
+    void TimerCancel(uint64_t id)
+    {
+        auto it = _timers.find(id);
+        if (it != _timers.end())
+        {
+            PtrTask pt = (it->second.lock());
+            if (pt)
+                pt->Cancel();
+        }
     }
     void RunTimerTask()
     {
