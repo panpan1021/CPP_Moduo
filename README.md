@@ -1,0 +1,8 @@
+关于eventloop timerwheel poller之间的联系
+
+poller就是个监听的类他负责监听每一个fd
+
+timerwheel是一个有关于task的类,包括task的执行,增删之类的(其实task就是个要你执行的函数了),任意线程都可以调用这个来添加一个任务
+
+eventloop是项目的核心类,它里面包含了poller,_eventfd._eventfd是为了唤醒线程,避免一直阻塞;每一个thread都会有一个这个对象,监听每一个fd,通过调用Start(),死循环 阻塞wait新链接,如果有新链接会直接返回,然后执行回调函数;如果被其他线程给任务了,那么也会执行readcallback
+把所有的tasks装到时间轮里面执行
