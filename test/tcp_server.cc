@@ -13,8 +13,9 @@ void HandleRead(Channel *channel)
     int ret = recv(fd, buf, 1023, 0);
     if (ret <= 0)
     {
-        channel->Remove();
+
         HandleClose(channel);
+        return;
     }
     // 为了给人回复
     channel->EnableWrite();
@@ -35,22 +36,31 @@ void HandleWrite(Channel *channel)
 
 void HandleError(Channel *channel)
 {
+    return HandleClose(channel);
 }
 
-void HandleEvent(Channel *channel)
+void HandleEvent(EventLoop *loop, Channel *channel, uint64_t id)
 {
+    loop->TimerRefresh(id);
+    std::cout << "有一个事件\n";
 }
 
-void Acceptor(Poller *poller, Channel *lst_channel)
+void Acceptor(EventLoop *loop, Channel *lst_channel)
 {
+    uint64_t timerid = rand() % 10000;
     int fd = lst_channel->Fd();
     int newfd = accept(fd, NULL, NULL);
     if (newfd < 0)
         return;
-    Channel *channel = new Channel(newfd, poller);
+    Channel *channel = new Channel(newfd, loop);
     channel->SetReadCallBack(std::bind(HandleRead, channel));
     channel->SetWriteCallBack(std::bind(HandleWrite, channel));
     channel->SetCloseCallBack(std::bind(HandleClose, channel));
+    channel->SetErrorCallBack(std::bind(HandleError, channel));
+    channel->SetEventCallBack(std::bind(HandleEvent, loop, channel, timerid));
+    channel->EnableRead();
+
+    loop->TimerAdd(timerid, 10, std::bind(HandleClose, channel));
     channel->EnableRead();
 }
 int main()
@@ -58,28 +68,13 @@ int main()
     Socket lst_sock;
     lst_sock.CreateServer(8500);
 
-    Poller poller;
-    Channel channel(lst_sock.Fd(), &poller);
-    channel.SetReadCallBack();
+    EventLoop loop;
+    Channel channel(lst_sock.Fd(), &loop);
+    channel.SetReadCallBack(std::bind(Acceptor, &loop, &channel));
+    channel.EnableRead();
 
-    while (1)
-    {
-        int newfd = lst_sock.Accept();
-        if (newfd < 0)
-        {
-            continue;
-        }
-        Socket cli_sock(newfd);
-        char buf[1024] = {0};
-        int ret = cli_sock.Recv(buf, 1023);
-        if (ret < 0)
-        {
-            cli_sock.Close();
-            continue;
-        }
-        cli_sock.Send(buf, ret);
-        cli_sock.Close();
-    }
+    loop.Start();
+
     lst_sock.Close();
     return 0;
 }
