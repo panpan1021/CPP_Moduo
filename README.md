@@ -72,7 +72,15 @@ epoll_wait 返回
 类里面只留声明（成员变量 + 方法签名）
 方法实现移到 EventLoop 和 Channel 全部定义完之后再写
 这其实就是 C++ 里处理循环依赖的标准套路：前向声明 + 拆分 .h/.cpp（或者像这里，在同一个头文件里把实现挪到后面）。
+
 2.类成员初始化定义问题
 C++ 按声明顺序初始化，但 _loop 在 _channel 之后声明，导致 _channel 拿到野指针
+
 3.在构造函数体内初始化
 C++ 里构造函数体内不能"构造"成员对象。
+
+4.找到 bug 了！_pool.Create() 调用时 _thread_count 还是 0，因为 SetThreadCount(2) 是在 TcpServer 构造之后才调用的。所以 _loops 为空，NextLoop() 访问空 vector 导致段错误。
+
+5.WebBench 是一个 HTTP 压测工具，它发送的是标准 HTTP 请求（如 GET / HTTP/1.0\r\nHost: ...\r\n\r\n），但你的 EchoServer 是一个原始 TCP Echo 服务器，它只是把收到的数据原样返回，并不理解 HTTP 协议。
+
+6.问题找到了！ReuseAddress() 在 Bind() 之后调用，但 SO_REUSEADDR 必须在 bind() 之前设置才有效：
